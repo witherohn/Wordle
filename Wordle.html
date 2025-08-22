@@ -116,7 +116,7 @@ function randInt(max){return Math.floor(Math.random()*max);}
 function dayKeyUTC(){return new Date().toISOString().slice(0,10);}
 
 // --- Load full dictionary
-fetch('words_alpha.txt')
+fetch('https://raw.githubusercontent.com/witherohn/Wordle/refs/heads/main/words_alpha.txt?token=GHSAT0AAAAAADJV4KMASITHOK224B4NSNSO2FH2Y2Q')
   .then(r=>r.text())
   .then(txt=>{
     settings.wordlist = txt.split(/\r?\n/).map(w=>w.toLowerCase());
@@ -210,3 +210,4 @@ window.addEventListener('keydown',(e)=>{
 </script>
 </body>
 </html>
+
