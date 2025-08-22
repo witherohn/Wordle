@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advanced Wordle — Full Dictionary</title>
+<style>
+:root{
+  --bg:#f3f4f6; --panel:#ffffff; --text:#0f172a; --muted:#94a3b8;
+  --green:#16a34a; --yellow:#eab308; --gray:#cfd8e3; --tile-size:64px;
+}
+[data-theme="dark"]{ --bg:#0b1220; --panel:#071126; --text:#e6eef8; --muted:#94a3b8;}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial; background:var(--bg); color:var(--text); display:flex; align-items:center; justify-content:center; padding:20px}
+.app{width:100%; max-width:980px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.title{font-weight:700;font-size:20px}
+.controls{display:flex;gap:8px;align-items:center}
+.btn{background:var(--panel);border:1px solid rgba(15,23,42,0.06);padding:8px 12px;border-radius:8px;cursor:pointer}
+.btn.primary{background:linear-gradient(180deg,#0ea5a1,#0b948b); color:white; border:none}
+.panel{background:var(--panel);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.06);}
+.main{display:grid;grid-template-columns:1fr 320px;gap:18px}
+.board{display:flex;flex-direction:column;gap:8px;align-items:center}
+.row{display:grid;grid-template-columns:repeat(var(--cols),var(--tile-size));gap:8px}
+.tile{width:var(--tile-size);height:var(--tile-size);display:flex;align-items:center;justify-content:center;background:transparent;border:2px solid rgba(15,23,42,0.08);font-weight:700;font-size:22px;border-radius:8px;user-select:none}
+.tile.filled{border:2px solid rgba(15,23,42,0.1)}
+.tile.correct{background:var(--green);color:white;border:none}
+.tile.present{background:var(--yellow);color:white;border:none}
+.tile.absent{background:transparent;color:var(--muted);opacity:0.4}
+.keyboard{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.keyboard-row{display:flex;gap:8px;justify-content:center}
+.key{min-width:44px;padding:10px 8px;border-radius:8px;border:0;background:#e6eef8;cursor:pointer;font-weight:700}
+.key.small{min-width:36px;padding:8px}
+.key.wide{min-width:86px}
+.key.correct{background:var(--green);color:white}
+.key.present{background:var(--yellow);color:white}
+.key.absent{background:#cbd5e1;color:#1e293b}
+.settings{display:flex;flex-direction:column;gap:8px}
+.input,textarea,select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(15,23,42,0.06);background:transparent}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{background:transparent;padding:8px;border-radius:8px;text-align:center}
+.small{font-size:13px;color:var(--muted)}
+.hint{font-size:14px;color:var(--muted);margin-top:8px}
+footer{margin-top:10px;font-size:12px;color:var(--muted);text-align:center}
+@media(max-width:900px){.main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app panel">
+  <div class="header">
+    <div>
+      <div class="title">Advanced Wordle — Full Dictionary</div>
+      <div class="small">Dynamic full English dictionary support</div>
+    </div>
+    <div class="controls">
+      <button id="newGameBtn" class="btn primary">New Game</button>
+      <button id="shareBtn" class="btn">Share</button>
+    </div>
+  </div>
+  <div class="main">
+    <div>
+      <div id="boardPanel" class="panel" style="min-height:420px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <div id="board" class="board"></div>
+        <div id="keyboard" class="keyboard"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:12px;align-items:center;justify-content:center">
+        <div id="message" class="small hint"></div>
+      </div>
+    </div>
+    <aside>
+      <div class="panel settings">
+        <strong>Game Settings</strong>
+        <label class="small">Word length</label>
+        <select id="colsSelect" class="input">
+          <option>5</option>
+          <option>4</option>
+          <option>6</option>
+          <option>7</option>
+        </select>
+        <label class="small">Max guesses</label>
+        <select id="rowsSelect" class="input">
+          <option>6</option>
+          <option>4</option>
+          <option>5</option>
+          <option>7</option>
+          <option>8</option>
+          <option>9</option>
+          <option>10</option>
+        </select>
+        <label class="small"><input type="checkbox" id="hardMode"/> Hard mode</label>
+        <label class="small"><input type="checkbox" id="darkMode"/> Dark theme</label>
+        <hr />
+        <strong class="small">Stats</strong>
+        <div class="stat-grid">
+          <div class="stat"><div id="gamesPlayed">0</div><div class="small">Played</div></div>
+          <div class="stat"><div id="winPct">0%</div><div class="small">Win %</div></div>
+          <div class="stat"><div id="currentStreak">0</div><div class="small">Current Streak</div></div>
+          <div class="stat"><div id="maxStreak">0</div><div class="small">Max Streak</div></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <footer class="small">Uses full English dictionary from external file</footer>
+</div>
+
+<script>
+// --- Settings & State
+let settings = {cols:5, rows:6, hard:false, dark:false, wordlist:[]};
+let stats = {played:0,wins:0,currentStreak:0,maxStreak:0};
+let game = null;
+
+// --- Utilities
+const qs=s=>document.querySelector(s), qsa=s=>Array.from(document.querySelectorAll(s));
+function randInt(max){return Math.floor(Math.random()*max);}
+function dayKeyUTC(){return new Date().toISOString().slice(0,10);}
+
+// --- Load full dictionary
+fetch('words_alpha.txt')
+  .then(r=>r.text())
+  .then(txt=>{
+    settings.wordlist = txt.split(/\r?\n/).map(w=>w.toLowerCase());
+    startNewGame();
+  })
+  .catch(err=>{console.error('Failed to load wordlist:',err); alert('Failed to load full dictionary.')});
+
+// --- Start new game
+function chooseAnswer(){
+  const pool = settings.wordlist.filter(w=>w.length===settings.cols);
+  if(pool.length===0) return null;
+  const key = dayKeyUTC();
+  const hash = Array.from(key).reduce((a,c)=>((a*31)+c.charCodeAt(0))>>>0,0);
+  return pool[hash%pool.length];
+}
+function startNewGame(){
+  const answer = chooseAnswer();
+  if(!answer){ alert('No words with chosen length in wordlist!'); return; }
+  game={answer:answer,guesses:[],evaluations:[],input:'',status:'playing',cols:settings.cols,rows:settings.rows,dayKey:dayKeyUTC()};
+  renderAll();
+}
+function renderAll(){ renderBoard(); buildKeyboard(); }
+
+// --- Board rendering
+function renderBoard(){
+  const board=qs('#board'); board.innerHTML='';
+  document.documentElement.style.setProperty('--cols', settings.cols);
+  for(let r=0;r<settings.rows;r++){
+    const row=document.createElement('div'); row.className='row';
+    for(let c=0;c<settings.cols;c++){
+      const tile=document.createElement('div'); tile.className='tile';
+      const guess = game.guesses[r];
+      const ch = guess ? guess[c]||'' : (r===game.guesses.length ? (game.input||'')[c]||'' : '');
+      if(ch) tile.textContent=ch.toUpperCase(), tile.classList.add('filled');
+      if(guess && game.evaluations[r]){
+        const ev = game.evaluations[r][c];
+        if(ev==='correct') tile.classList.add('correct');
+        else if(ev==='present') tile.classList.add('present');
+        else tile.classList.add('absent');
+      }
+      row.appendChild(tile);
+    }
+    board.appendChild(row);
+  }
+}
+function buildKeyboard(){
+  const layout=['qwertyuiop','asdfghjkl','zxcvbnm']; const kbd=qs('#keyboard'); kbd.innerHTML='';
+  layout.forEach((row,i)=>{
+    const rdiv=document.createElement('div'); rdiv.className='keyboard-row';
+    if(i===2){ rdiv.appendChild(makeKey('Enter','wide')); }
+    row.split('').forEach(ch=>rdiv.appendChild(makeKey(ch.toUpperCase())));
+    if(i===2){ rdiv.appendChild(makeKey('Backspace','wide')); }
+    kbd.appendChild(rdiv);
+  });
+}
+function makeKey(label,cls=''){ const btn=document.createElement('button'); btn.className='key '+cls; btn.textContent=label; btn.dataset.key=label; btn.addEventListener('click',()=>onKey(label)); return btn; }
+
+// --- Input
+function onKey(label){
+  if(!game||game.status!=='playing') return; label=label.toLowerCase();
+  if(label==='enter'){ submitInput(); return; }
+  if(label==='backspace'){ game.input=(game.input||'').slice(0,-1); renderBoard(); return; }
+  if(/^[a-z]$/.test(label)){ if((game.input||'').length<settings.cols) game.input+=(label||''); renderBoard(); }
+}
+function submitInput(){
+  if(!game||game.status!=='playing') return;
+  const input=(game.input||'').toLowerCase();
+  if(input.length!==settings.cols){ showMessage('Not enough letters'); return; }
+  if(!settings.wordlist.includes(input)){ showMessage('Word not in list'); return; }
+  const evalRes=evaluateGuess(input,game.answer); game.guesses.push(input); game.evaluations.push(evalRes); game.input='';
+  if(evalRes.every(x=>x==='correct')){ game.status='won'; showMessage('You won! '+game.answer.toUpperCase()); }
+  else if(game.guesses.length>=settings.rows){ game.status='lost'; showMessage('You lost. '+game.answer.toUpperCase()); }
+  renderAll();
+}
+function evaluateGuess(guess,answer){
+  guess=guess.toLowerCase(); answer=answer.toLowerCase();
+  const res=Array(guess.length).fill('absent'); const answerLetters=answer.split('');
+  for(let i=0;i<guess.length;i++) if(guess[i]===answer[i]){ res[i]='correct'; answerLetters[i]=null; }
+  for(let i=0;i<guess.length;i++){ if(res[i]==='correct') continue; const idx=answerLetters.indexOf(guess[i]); if(idx>-1){ res[i]='present'; answerLetters[idx]=null; } }
+  return res;
+}
+function showMessage(txt){ const m=qs('#message'); m.textContent=txt; setTimeout(()=>{ if(m.textContent===txt) m.textContent=''; },3000); }
+
+// --- Event listeners
+qs('#newGameBtn').addEventListener('click',()=>startNewGame());
+window.addEventListener('keydown',(e)=>{
+  if(e.key==='Enter'){ onKey('Enter'); e.preventDefault(); }
+  else if(e.key==='Backspace'){ onKey('Backspace'); }
+  else if(/^[a-zA-Z]$/.test(e.key)){ onKey(e.key); }
+});
+</script>
+</body>
+</html>
